@@ -11,6 +11,7 @@ import (
 
 	"github.com/bamorim/borumi-cli/internal/borumi"
 	"github.com/bamorim/borumi-cli/internal/render"
+	"github.com/bamorim/borumi-cli/internal/script"
 )
 
 const version = "0.1.0-bootstrap"
@@ -85,9 +86,9 @@ func runScenes(args []string, stdout io.Writer, stderr io.Writer) int {
 
 func printScenesHelp(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
-	fmt.Fprintln(w, "  borumi-cli scenes list [--bundle <path>] [--format table|json]")
-	fmt.Fprintln(w, "  borumi-cli scenes get (--scene <id-or-name-or-seq> | --index <n>) [--bundle <path>] [--format table|json]")
-	fmt.Fprintln(w, "  borumi-cli scenes set-script (--scene <id-or-name-or-seq> | --index <n>) (--script <text> | --script-file <path>) [--bundle <path>] [--format table|json]")
+	fmt.Fprintln(w, "  borumi-cli scenes list [--bundle <path>] [--format table|json] [--render-script <bool>]")
+	fmt.Fprintln(w, "  borumi-cli scenes get (--scene <id-or-name-or-seq> | --index <n>) [--bundle <path>] [--format table|json] [--render-script <bool>]")
+	fmt.Fprintln(w, "  borumi-cli scenes set-script (--scene <id-or-name-or-seq> | --index <n>) (--script <markdown-or-json> | --script-file <path>) [--bundle <path>] [--format table|json] [--render-script <bool>]")
 }
 
 func runScenesList(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -96,6 +97,8 @@ func runScenesList(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	bundlePath := fs.String("bundle", ".", "Bundle path")
 	formatArg := fs.String("format", string(formatTable), "Output format: table|json")
+	renderScriptArg := fs.Bool("render-script", false, "Render script as markdown")
+	args = normalizeBoolFlagArgs(args, "render-script")
 
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintln(stderr, err.Error())
@@ -108,6 +111,7 @@ func runScenesList(args []string, stdout io.Writer, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err.Error())
 		return 1
 	}
+	renderScript := resolveRenderScript(*renderScriptArg, wasFlagProvided(fs, "render-script"), format)
 
 	bundle, err := borumi.ResolveBundle(*bundlePath)
 	if err != nil {
@@ -123,7 +127,12 @@ func runScenesList(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	switch format {
 	case formatJSON:
-		return writeJSON(stdout, stderr, scenes)
+		out, err := scenesForJSONOutput(scenes, renderScript)
+		if err != nil {
+			fmt.Fprintln(stderr, err.Error())
+			return 1
+		}
+		return writeJSON(stdout, stderr, out)
 	default:
 		rows := make([][]string, 0, len(scenes))
 		for _, scene := range scenes {
@@ -150,6 +159,8 @@ func runScenesGet(args []string, stdout io.Writer, stderr io.Writer) int {
 	sceneSelector := fs.String("scene", "", "Scene id, name, or seq")
 	sceneIndex := fs.Int("index", 0, "Scene index from scenes list (1-based)")
 	formatArg := fs.String("format", string(formatTable), "Output format: table|json")
+	renderScriptArg := fs.Bool("render-script", false, "Render script as markdown")
+	args = normalizeBoolFlagArgs(args, "render-script")
 
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintln(stderr, err.Error())
@@ -162,6 +173,7 @@ func runScenesGet(args []string, stdout io.Writer, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err.Error())
 		return 1
 	}
+	renderScript := resolveRenderScript(*renderScriptArg, wasFlagProvided(fs, "render-script"), format)
 
 	bundle, err := borumi.ResolveBundle(*bundlePath)
 	if err != nil {
@@ -176,16 +188,15 @@ func runScenesGet(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 
 	if format == formatJSON {
-		return writeJSON(stdout, stderr, scene)
+		jsonScene, err := sceneForJSONOutput(scene, renderScript)
+		if err != nil {
+			fmt.Fprintln(stderr, err.Error())
+			return 1
+		}
+		return writeJSON(stdout, stderr, jsonScene)
 	}
 
-	fmt.Fprintln(stdout, render.Properties([][2]string{
-		{"id", scene.ID},
-		{"index", fmt.Sprintf("%d", scene.Index)},
-		{"seq", scene.Seq},
-		{"name", scene.Name},
-		{"script", scene.Script},
-	}))
+	fmt.Fprintln(stdout, renderSceneGetOutput(scene, renderScript))
 	return 0
 }
 
@@ -199,6 +210,8 @@ func runScenesSetScript(args []string, stdout io.Writer, stderr io.Writer) int {
 	script := fs.String("script", "", "New script text")
 	scriptFile := fs.String("script-file", "", "Path to file containing new script text")
 	formatArg := fs.String("format", string(formatTable), "Output format: table|json")
+	renderScriptArg := fs.Bool("render-script", false, "Render script as markdown")
+	args = normalizeBoolFlagArgs(args, "render-script")
 
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintln(stderr, err.Error())
@@ -212,11 +225,18 @@ func runScenesSetScript(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 
+	scriptJSON, err := prepareScriptForStorage(newScript)
+	if err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		return 1
+	}
+
 	format, err := parseFormat(*formatArg)
 	if err != nil {
 		fmt.Fprintln(stderr, err.Error())
 		return 1
 	}
+	renderScript := resolveRenderScript(*renderScriptArg, wasFlagProvided(fs, "render-script"), format)
 
 	bundle, err := borumi.ResolveBundle(*bundlePath)
 	if err != nil {
@@ -230,23 +250,32 @@ func runScenesSetScript(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 
-	updated, err := borumi.SetSceneScript(bundle.DBPath, targetScene.ID, newScript)
+	updated, err := borumi.SetSceneScript(bundle.DBPath, targetScene.ID, scriptJSON)
 	if err != nil {
 		fmt.Fprintln(stderr, err.Error())
 		return 1
 	}
 
 	if format == formatJSON {
-		return writeJSON(stdout, stderr, updated)
+		jsonScene, err := sceneForJSONOutput(updated, renderScript)
+		if err != nil {
+			fmt.Fprintln(stderr, err.Error())
+			return 1
+		}
+		return writeJSON(stdout, stderr, jsonScene)
 	}
 
+	displayScript := renderScriptForDisplay(updated.Script)
+	if !renderScript {
+		displayScript = updated.Script
+	}
 	fmt.Fprintln(stdout, render.Properties([][2]string{
 		{"status", "updated"},
 		{"id", updated.ID},
 		{"index", fmt.Sprintf("%d", updated.Index)},
 		{"seq", updated.Seq},
 		{"name", updated.Name},
-		{"script", updated.Script},
+		{"script", displayScript},
 	}))
 	return 0
 }
@@ -309,4 +338,128 @@ func writeJSON(stdout io.Writer, stderr io.Writer, value any) int {
 		return 1
 	}
 	return 0
+}
+
+func renderScriptForDisplay(rawScript string) string {
+	markdown, err := script.JSONToMarkdown(rawScript)
+	if err != nil {
+		return rawScript
+	}
+	return markdown
+}
+
+func prepareScriptForStorage(input string) (string, error) {
+	raw, err := script.NormalizeOrConvertToJSON(input)
+	if err != nil {
+		return "", fmt.Errorf("could not convert script input: %w", err)
+	}
+	return raw, nil
+}
+
+func renderSceneGetOutput(scene borumi.Scene, renderScript bool) string {
+	table := render.Properties([][2]string{
+		{"id", scene.ID},
+		{"index", fmt.Sprintf("%d", scene.Index)},
+		{"seq", scene.Seq},
+		{"name", scene.Name},
+	})
+
+	displayScript := scene.Script
+	if renderScript {
+		displayScript = renderScriptForDisplay(scene.Script)
+	}
+	if strings.TrimSpace(displayScript) == "" {
+		return table
+	}
+
+	return table + "\n\n" + displayScript
+}
+
+func wasFlagProvided(fs *flag.FlagSet, name string) bool {
+	provided := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			provided = true
+		}
+	})
+	return provided
+}
+
+func resolveRenderScript(value bool, provided bool, format outputFormat) bool {
+	if provided {
+		return value
+	}
+	return format == formatTable
+}
+
+type sceneJSONOutput struct {
+	Index  int    `json:"index,omitempty"`
+	ID     string `json:"id"`
+	Seq    string `json:"seq"`
+	Name   string `json:"name"`
+	Script any    `json:"script"`
+}
+
+func sceneForJSONOutput(scene borumi.Scene, renderScript bool) (sceneJSONOutput, error) {
+	out := sceneJSONOutput{
+		Index: scene.Index,
+		ID:    scene.ID,
+		Seq:   scene.Seq,
+		Name:  scene.Name,
+	}
+
+	if renderScript {
+		out.Script = renderScriptForDisplay(scene.Script)
+		return out, nil
+	}
+
+	scriptJSON, err := scriptRawJSON(scene.Script)
+	if err != nil {
+		return sceneJSONOutput{}, err
+	}
+	out.Script = scriptJSON
+	return out, nil
+}
+
+func scenesForJSONOutput(scenes []borumi.Scene, renderScript bool) ([]sceneJSONOutput, error) {
+	out := make([]sceneJSONOutput, 0, len(scenes))
+	for _, scene := range scenes {
+		converted, err := sceneForJSONOutput(scene, renderScript)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, converted)
+	}
+	return out, nil
+}
+
+func scriptRawJSON(rawScript string) (any, error) {
+	trimmed := strings.TrimSpace(rawScript)
+	if trimmed == "" {
+		return nil, nil
+	}
+	if !json.Valid([]byte(trimmed)) {
+		return nil, fmt.Errorf("script is not valid json")
+	}
+	return json.RawMessage(trimmed), nil
+}
+
+func normalizeBoolFlagArgs(args []string, flagName string) []string {
+	long := "--" + flagName
+	short := "-" + flagName
+
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		current := args[i]
+		if (current == long || current == short) && i+1 < len(args) {
+			next := strings.ToLower(strings.TrimSpace(args[i+1]))
+			if next == "true" || next == "false" {
+				out = append(out, current+"="+next)
+				i++
+				continue
+			}
+		}
+		out = append(out, current)
+	}
+	return out
 }
