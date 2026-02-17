@@ -1,0 +1,30 @@
+[tools]
+go = "1.25.6"
+
+[tasks.build]
+description = "Build the borumi CLI binary"
+run = "go build -o bin/borumi ./cmd/borumi"
+
+[tasks.test]
+description = "Run unit tests"
+run = "go test ./..."
+
+[tasks.test-race]
+description = "Run tests with race detector"
+run = "go test -race ./..."
+
+[tasks.fmt]
+description = "Format Go source files"
+run = "go fmt ./..."
+
+[tasks.vet]
+description = "Run go vet checks"
+run = "go vet ./..."
+
+[tasks.tidy]
+description = "Sync go.mod and go.sum"
+run = "go mod tidy"
+
+[tasks.check]
+description = "Run format, vet, and tests"
+depends = ["fmt", "vet", "test"]

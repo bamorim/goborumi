@@ -25,6 +25,25 @@ The first focus is local Borumi project bundles (`.bmprojbundle`), which current
 - Product requirements tracked in `PRD.md`
 - First command set implemented for scene script management
 
+## Development with mise
+
+This project uses [`mise`](https://mise.jdx.dev/) to pin the Go toolchain and provide common dev tasks.
+
+```bash
+mise install
+mise tasks
+```
+
+Common tasks:
+
+- `mise run build` - build `bin/borumi`
+- `mise run test` - run unit tests
+- `mise run test-race` - run tests with race detector
+- `mise run fmt` - format Go code
+- `mise run vet` - run static checks
+- `mise run tidy` - sync `go.mod`/`go.sum`
+- `mise run check` - run format, vet, and tests
+
 ## Current commands
 
 `borumi-cli` currently focuses on scene scripts (the first end-to-end win).
