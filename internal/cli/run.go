@@ -1,0 +1,312 @@
+package cli
+
+import (
+	"encoding/json"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+
+	"github.com/bamorim/borumi-cli/internal/borumi"
+	"github.com/bamorim/borumi-cli/internal/render"
+)
+
+const version = "0.1.0-bootstrap"
+
+type outputFormat string
+
+const (
+	formatTable outputFormat = "table"
+	formatJSON  outputFormat = "json"
+)
+
+func Run(args []string, stdout io.Writer, stderr io.Writer) int {
+	if len(args) == 0 {
+		printHelp(stdout)
+		return 0
+	}
+
+	switch args[0] {
+	case "help", "--help", "-h":
+		printHelp(stdout)
+		return 0
+	case "version", "--version", "-v":
+		fmt.Fprintf(stdout, "borumi-cli %s\n", version)
+		return 0
+	case "scenes":
+		return runScenes(args[1:], stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
+		printHelp(stderr)
+		return 1
+	}
+}
+
+func printHelp(w io.Writer) {
+	fmt.Fprintln(w, "borumi-cli")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "CLI utilities for Borumi projects.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Usage:")
+	fmt.Fprintln(w, "  borumi-cli <command> [flags]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Commands:")
+	fmt.Fprintln(w, "  scenes list        List scenes for a project")
+	fmt.Fprintln(w, "  scenes get         Read one scene script/details")
+	fmt.Fprintln(w, "  scenes set-script  Update one scene script")
+	fmt.Fprintln(w, "  version            Print version")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Global conventions:")
+	fmt.Fprintln(w, "  - Use --bundle with a .bmprojbundle path, a project directory, or project.bmproj")
+	fmt.Fprintln(w, "  - Use --format table|json (default: table)")
+}
+
+func runScenes(args []string, stdout io.Writer, stderr io.Writer) int {
+	if len(args) == 0 {
+		printScenesHelp(stderr)
+		return 1
+	}
+
+	switch args[0] {
+	case "list":
+		return runScenesList(args[1:], stdout, stderr)
+	case "get", "show":
+		return runScenesGet(args[1:], stdout, stderr)
+	case "set-script":
+		return runScenesSetScript(args[1:], stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "unknown scenes command: %s\n\n", args[0])
+		printScenesHelp(stderr)
+		return 1
+	}
+}
+
+func printScenesHelp(w io.Writer) {
+	fmt.Fprintln(w, "Usage:")
+	fmt.Fprintln(w, "  borumi-cli scenes list [--bundle <path>] [--format table|json]")
+	fmt.Fprintln(w, "  borumi-cli scenes get (--scene <id-or-name-or-seq> | --index <n>) [--bundle <path>] [--format table|json]")
+	fmt.Fprintln(w, "  borumi-cli scenes set-script (--scene <id-or-name-or-seq> | --index <n>) (--script <text> | --script-file <path>) [--bundle <path>] [--format table|json]")
+}
+
+func runScenesList(args []string, stdout io.Writer, stderr io.Writer) int {
+	fs := flag.NewFlagSet("scenes list", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+
+	bundlePath := fs.String("bundle", ".", "Bundle path")
+	formatArg := fs.String("format", string(formatTable), "Output format: table|json")
+
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		printScenesHelp(stderr)
+		return 1
+	}
+
+	format, err := parseFormat(*formatArg)
+	if err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		return 1
+	}
+
+	bundle, err := borumi.ResolveBundle(*bundlePath)
+	if err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		return 1
+	}
+
+	scenes, err := borumi.ListScenes(bundle.DBPath)
+	if err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		return 1
+	}
+
+	switch format {
+	case formatJSON:
+		return writeJSON(stdout, stderr, scenes)
+	default:
+		rows := make([][]string, 0, len(scenes))
+		for _, scene := range scenes {
+			rows = append(rows, []string{
+				fmt.Sprintf("%d", scene.Index),
+				scene.ID,
+				scene.Name,
+				fmt.Sprintf("%d", len(scene.Script)),
+			})
+		}
+		fmt.Fprintln(stdout, render.Table(
+			[]string{"INDEX", "ID", "NAME", "SCRIPT_LEN"},
+			rows,
+		))
+		return 0
+	}
+}
+
+func runScenesGet(args []string, stdout io.Writer, stderr io.Writer) int {
+	fs := flag.NewFlagSet("scenes get", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+
+	bundlePath := fs.String("bundle", ".", "Bundle path")
+	sceneSelector := fs.String("scene", "", "Scene id, name, or seq")
+	sceneIndex := fs.Int("index", 0, "Scene index from scenes list (1-based)")
+	formatArg := fs.String("format", string(formatTable), "Output format: table|json")
+
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		printScenesHelp(stderr)
+		return 1
+	}
+
+	format, err := parseFormat(*formatArg)
+	if err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		return 1
+	}
+
+	bundle, err := borumi.ResolveBundle(*bundlePath)
+	if err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		return 1
+	}
+
+	scene, err := resolveScene(bundle.DBPath, *sceneSelector, *sceneIndex)
+	if err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		return 1
+	}
+
+	if format == formatJSON {
+		return writeJSON(stdout, stderr, scene)
+	}
+
+	fmt.Fprintln(stdout, render.Properties([][2]string{
+		{"id", scene.ID},
+		{"index", fmt.Sprintf("%d", scene.Index)},
+		{"seq", scene.Seq},
+		{"name", scene.Name},
+		{"script", scene.Script},
+	}))
+	return 0
+}
+
+func runScenesSetScript(args []string, stdout io.Writer, stderr io.Writer) int {
+	fs := flag.NewFlagSet("scenes set-script", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+
+	bundlePath := fs.String("bundle", ".", "Bundle path")
+	sceneSelector := fs.String("scene", "", "Scene id, name, or seq")
+	sceneIndex := fs.Int("index", 0, "Scene index from scenes list (1-based)")
+	script := fs.String("script", "", "New script text")
+	scriptFile := fs.String("script-file", "", "Path to file containing new script text")
+	formatArg := fs.String("format", string(formatTable), "Output format: table|json")
+
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		printScenesHelp(stderr)
+		return 1
+	}
+
+	newScript, err := readScriptInput(*script, *scriptFile)
+	if err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		return 1
+	}
+
+	format, err := parseFormat(*formatArg)
+	if err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		return 1
+	}
+
+	bundle, err := borumi.ResolveBundle(*bundlePath)
+	if err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		return 1
+	}
+
+	targetScene, err := resolveScene(bundle.DBPath, *sceneSelector, *sceneIndex)
+	if err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		return 1
+	}
+
+	updated, err := borumi.SetSceneScript(bundle.DBPath, targetScene.ID, newScript)
+	if err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		return 1
+	}
+
+	if format == formatJSON {
+		return writeJSON(stdout, stderr, updated)
+	}
+
+	fmt.Fprintln(stdout, render.Properties([][2]string{
+		{"status", "updated"},
+		{"id", updated.ID},
+		{"index", fmt.Sprintf("%d", updated.Index)},
+		{"seq", updated.Seq},
+		{"name", updated.Name},
+		{"script", updated.Script},
+	}))
+	return 0
+}
+
+func parseFormat(value string) (outputFormat, error) {
+	switch outputFormat(strings.ToLower(strings.TrimSpace(value))) {
+	case formatTable:
+		return formatTable, nil
+	case formatJSON:
+		return formatJSON, nil
+	default:
+		return "", fmt.Errorf("invalid --format value %q (expected table|json)", value)
+	}
+}
+
+func readScriptInput(script string, scriptFile string) (string, error) {
+	scriptFile = strings.TrimSpace(scriptFile)
+
+	if strings.TrimSpace(script) == "" && scriptFile == "" {
+		return "", errors.New("one of --script or --script-file is required")
+	}
+
+	if strings.TrimSpace(script) != "" && scriptFile != "" {
+		return "", errors.New("use only one of --script or --script-file")
+	}
+
+	if strings.TrimSpace(script) != "" {
+		return script, nil
+	}
+
+	content, err := os.ReadFile(scriptFile)
+	if err != nil {
+		return "", fmt.Errorf("could not read --script-file %q: %w", scriptFile, err)
+	}
+	return string(content), nil
+}
+
+func resolveScene(dbPath string, sceneSelector string, sceneIndex int) (borumi.Scene, error) {
+	sceneSelector = strings.TrimSpace(sceneSelector)
+
+	if sceneSelector == "" && sceneIndex == 0 {
+		return borumi.Scene{}, errors.New("one of --scene or --index is required")
+	}
+	if sceneSelector != "" && sceneIndex != 0 {
+		return borumi.Scene{}, errors.New("use only one of --scene or --index")
+	}
+
+	if sceneIndex > 0 {
+		return borumi.GetSceneByIndex(dbPath, sceneIndex)
+	}
+
+	return borumi.GetScene(dbPath, sceneSelector)
+}
+
+func writeJSON(stdout io.Writer, stderr io.Writer, value any) int {
+	enc := json.NewEncoder(stdout)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(value); err != nil {
+		fmt.Fprintf(stderr, "failed to write json output: %v\n", err)
+		return 1
+	}
+	return 0
+}
