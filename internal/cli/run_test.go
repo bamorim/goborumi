@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bamorim/borumi-cli/internal/borumi"
+	"github.com/bamorim/goborumi/internal/borumi"
 )
 
 func TestParseFormat(t *testing.T) {

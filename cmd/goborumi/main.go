@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/bamorim/borumi-cli/internal/cli"
+	"github.com/bamorim/goborumi/internal/cli"
 )
 
 func main() {

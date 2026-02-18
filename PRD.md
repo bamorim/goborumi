@@ -4,7 +4,7 @@
 
 ## 1. Product summary
 
-`borumi-cli` is a Go CLI that provides a reliable interface for operating on Borumi projects, starting with local `.bmprojbundle` files and eventually powering agent skills/workflows.
+`goborumi` is a Go CLI that provides a reliable interface for operating on Borumi projects, starting with local `.bmprojbundle` files and eventually powering agent skills/workflows.
 
 ## 2. Problem statement
 
@@ -84,7 +84,7 @@ These assumptions should be validated against more projects and versions.
    - Post-prod: extract final edit scene timestamps for YouTube timestamps.
    - Edit phase: extract voice transcripts for downstream animation tooling.
 2. Writes are allowed for low-risk operations (for example scene script editing). Destructive operations (delete flows) are out of scope for now.
-3. Binary name: `borumi-cli`.
+3. Binary name: `goborumi`.
 4. Output format: default `table` + opt-in `--format json`.
 5. Scope: single project first (no batch mode requirement right now).
 6. Schema/version strategy: keep initial implementation simple and pragmatic.

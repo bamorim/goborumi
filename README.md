@@ -1,6 +1,6 @@
-# borumi-cli
+# goborumi
 
-`borumi-cli` is a Go command-line tool to inspect, automate, and manipulate Borumi projects.
+`goborumi` is a Go command-line tool to inspect, automate, and manipulate Borumi projects.
 
 This repository is intentionally in bootstrap mode. We are defining product direction first and will iterate quickly on command design.
 
@@ -36,7 +36,7 @@ mise tasks
 
 Common tasks:
 
-- `mise run build` - build `bin/borumi`
+- `mise run build` - build `bin/goborumi`
 - `mise run test` - run unit tests
 - `mise run test-race` - run tests with race detector
 - `mise run fmt` - format Go code
@@ -46,13 +46,13 @@ Common tasks:
 
 ## Current commands
 
-`borumi-cli` currently focuses on scene scripts (the first end-to-end win).
+`goborumi` currently focuses on scene scripts (the first end-to-end win).
 
-- `borumi-cli scenes list --bundle <path>`
-- `borumi-cli scenes get --bundle <path> --index <n>`
-- `borumi-cli scenes get --bundle <path> --scene <id-or-name>`
-- `borumi-cli scenes set-script --bundle <path> --index <n> --script "<text>"`
-- `borumi-cli scenes set-script --bundle <path> --scene <id-or-name> --script-file <file>`
+- `goborumi scenes list --bundle <path>`
+- `goborumi scenes get --bundle <path> --index <n>`
+- `goborumi scenes get --bundle <path> --scene <id-or-name>`
+- `goborumi scenes set-script --bundle <path> --index <n> --script "<text>"`
+- `goborumi scenes set-script --bundle <path> --scene <id-or-name> --script-file <file>`
 
 Output defaults to table format and supports JSON:
 
@@ -62,7 +62,7 @@ Output defaults to table format and supports JSON:
 ## Example
 
 ```bash
-borumi-cli scenes get \
+goborumi scenes get \
   --bundle "$HOME/Borumi Projects/How to build an AI agent.bmprojbundle" \
   --index 1 \
   --format table

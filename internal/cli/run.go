@@ -9,9 +9,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/bamorim/borumi-cli/internal/borumi"
-	"github.com/bamorim/borumi-cli/internal/render"
-	"github.com/bamorim/borumi-cli/internal/script"
+	"github.com/bamorim/goborumi/internal/borumi"
+	"github.com/bamorim/goborumi/internal/render"
+	"github.com/bamorim/goborumi/internal/script"
 )
 
 const version = "0.1.0-bootstrap"
@@ -34,7 +34,7 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 		printHelp(stdout)
 		return 0
 	case "version", "--version", "-v":
-		fmt.Fprintf(stdout, "borumi-cli %s\n", version)
+		fmt.Fprintf(stdout, "goborumi %s\n", version)
 		return 0
 	case "scenes":
 		return runScenes(args[1:], stdout, stderr)
@@ -46,12 +46,12 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 }
 
 func printHelp(w io.Writer) {
-	fmt.Fprintln(w, "borumi-cli")
+	fmt.Fprintln(w, "goborumi")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "CLI utilities for Borumi projects.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Usage:")
-	fmt.Fprintln(w, "  borumi-cli <command> [flags]")
+	fmt.Fprintln(w, "  goborumi <command> [flags]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Commands:")
 	fmt.Fprintln(w, "  scenes list        List scenes for a project")
@@ -86,9 +86,9 @@ func runScenes(args []string, stdout io.Writer, stderr io.Writer) int {
 
 func printScenesHelp(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
-	fmt.Fprintln(w, "  borumi-cli scenes list [--bundle <path>] [--format table|json] [--render-script <bool>]")
-	fmt.Fprintln(w, "  borumi-cli scenes get (--scene <id-or-name-or-seq> | --index <n>) [--bundle <path>] [--format table|json] [--render-script <bool>]")
-	fmt.Fprintln(w, "  borumi-cli scenes set-script (--scene <id-or-name-or-seq> | --index <n>) (--script <markdown-or-json> | --script-file <path>) [--bundle <path>] [--format table|json] [--render-script <bool>]")
+	fmt.Fprintln(w, "  goborumi scenes list [--bundle <path>] [--format table|json] [--render-script <bool>]")
+	fmt.Fprintln(w, "  goborumi scenes get (--scene <id-or-name-or-seq> | --index <n>) [--bundle <path>] [--format table|json] [--render-script <bool>]")
+	fmt.Fprintln(w, "  goborumi scenes set-script (--scene <id-or-name-or-seq> | --index <n>) (--script <markdown-or-json> | --script-file <path>) [--bundle <path>] [--format table|json] [--render-script <bool>]")
 }
 
 func runScenesList(args []string, stdout io.Writer, stderr io.Writer) int {

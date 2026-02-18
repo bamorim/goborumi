@@ -2,8 +2,8 @@
 go = "1.25.6"
 
 [tasks.build]
-description = "Build the borumi CLI binary"
-run = "go build -o bin/borumi ./cmd/borumi"
+description = "Build the goborumi CLI binary"
+run = "go build -o bin/goborumi ./cmd/goborumi"
 
 [tasks.test]
 description = "Run unit tests"
