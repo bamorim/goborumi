@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,6 +10,39 @@ import (
 
 	"github.com/bamorim/goborumi/internal/borumi"
 )
+
+func TestRunVersionCommand(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := Run([]string{"version"}, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d (stderr=%q)", exitCode, stderr.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("expected no stderr output, got %q", stderr.String())
+	}
+	if strings.TrimSpace(stdout.String()) != "goborumi "+version {
+		t.Fatalf("unexpected version output: %q", stdout.String())
+	}
+}
+
+func TestRunUnknownCommand(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := Run([]string{"does-not-exist"}, &stdout, &stderr)
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", exitCode)
+	}
+	if !strings.Contains(stderr.String(), "No help topic for 'does-not-exist'") {
+		t.Fatalf("expected unknown command error, got %q", stderr.String())
+	}
+}
 
 func TestParseFormat(t *testing.T) {
 	t.Parallel()
@@ -216,42 +250,5 @@ func TestScenesForJSONOutput(t *testing.T) {
 	}
 	if !strings.Contains(string(raw), `"script":{"selection":null`) {
 		t.Fatalf("expected unwrapped json script, got %s", string(raw))
-	}
-}
-
-func TestNormalizeBoolFlagArgs(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		args []string
-		want []string
-	}{
-		{
-			name: "space separated true",
-			args: []string{"--render-script", "true", "--format", "json"},
-			want: []string{"--render-script=true", "--format", "json"},
-		},
-		{
-			name: "space separated false",
-			args: []string{"--render-script", "false"},
-			want: []string{"--render-script=false"},
-		},
-		{
-			name: "already equals form",
-			args: []string{"--render-script=true"},
-			want: []string{"--render-script=true"},
-		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got := normalizeBoolFlagArgs(tt.args, "render-script")
-			if strings.Join(got, "|") != strings.Join(tt.want, "|") {
-				t.Fatalf("unexpected normalized args: got=%v want=%v", got, tt.want)
-			}
-		})
 	}
 }

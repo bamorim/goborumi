@@ -1,8 +1,6 @@
-package render
+package cli
 
-import (
-	"strings"
-)
+import "strings"
 
 func Table(headers []string, rows [][]string) string {
 	widths := make([]int, len(headers))
